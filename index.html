@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Financial Metrics Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card: #121826;
+      --ink: #e6eaf2;
+      --muted: #95a1b6;
+      --ring: rgba(79,140,255,.35);
+      --shadow: 0 8px 30px rgba(0,0,0,.25);
+      --chart-h: 220px;  /* keep x-axis visible without extra scroll */
+      --bar-h: 200px;
+      --gap: 12px;
+      --pad: 12px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, #0b0f17 0%, #0d1322 100%);
+      color: var(--ink);
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: var(--pad); }
+    header { position: sticky; top: 0; z-index: 5; background: linear-gradient(180deg, rgba(13,19,34,.95), rgba(13,19,34,.85)); backdrop-filter: blur(6px); border-bottom: 1px solid rgba(255,255,255,.06); }
+    .head-row { display:flex; align-items:center; justify-content: space-between; gap: 8px; padding: 10px var(--pad); }
+    .title h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: .2px; }
+    .title small { color: var(--muted); }
+    .toolbar { display:flex; gap: 8px; flex-wrap: wrap; }
+    .btn, .toggle {
+      background: linear-gradient(180deg, #1b2234, #0f1422); color: var(--ink);
+      border: 1px solid rgba(255,255,255,.08); padding: 8px 10px; border-radius: 10px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 8px; font-size: 12px;
+    }
+    details.filters { margin: 8px var(--pad) 10px; border: 1px solid rgba(255,255,255,.06); border-radius: 12px; background: rgba(255,255,255,.03); box-shadow: var(--shadow); }
+    details.filters > summary { list-style: none; cursor: pointer; padding: 10px 12px; color: var(--muted); user-select: none; }
+    details.filters[open] > summary { border-bottom: 1px solid rgba(255,255,255,.06); }
+    .filters-grid { display: grid; gap: 8px; grid-template-columns: repeat(9, minmax(140px, 1fr)); padding: 12px; }
+    @media (max-width: 1200px){ .filters-grid { grid-template-columns: repeat(3, minmax(160px,1fr)); } }
+    @media (max-width: 700px){ .filters-grid { grid-template-columns: repeat(2, minmax(150px,1fr)); } }
+    label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+    select {
+      appearance: none; background: var(--card); color: var(--ink);
+      border: 1px solid rgba(255,255,255,.08); border-radius: 10px;
+      padding: 8px 10px; outline: none;
+    }
+    select:focus { box-shadow: inset 0 0 0 1px var(--ring); border-color: var(--ring); }
+
+    .panels { display: grid; gap: var(--gap); grid-template-columns: 1fr; padding: 10px var(--pad) 30px; }
+    .panel { background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 14px; padding: var(--pad); box-shadow: var(--shadow); }
+    .panel h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; letter-spacing:.2px; }
+    .panel .sub { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 6px; }
+    .kpis .kpi { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 10px; }
+    .kpis .kpi h4{ margin:0; font-size:11px; color: var(--muted); }
+    .kpis .kpi .v{ font-size: 16px; font-weight: 700; margin-top:4px; }
+    canvas.chart { width: 100%; height: var(--chart-h); }
+    canvas.bar { width: 100%; height: var(--bar-h); }
+    footer { color: var(--muted); font-size: 12px; margin: 10px 0 30px; text-align:center; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="head-row wrap">
+      <div class="title">
+        <h1>Financial Metrics Dashboard</h1>
+        <small id="asOf"></small>
+      </div>
+      <div class="toolbar">
+        <button class="toggle" id="toggleFilters">Show filters</button>
+        <button class="toggle" id="compactBtn">Compact on</button>
+        <button class="btn" id="resetBtn">Reset filters</button>
+      </div>
+    </div>
+    <details class="filters" id="filtersBlock">
+      <summary>Filters</summary>
+      <div class="filters-grid wrap" style="padding-top:0;">
+        <label>By country
+          <select id="f_country">
+            <option>All</option>
+            <option>Indonesia</option>
+            <option>Malaysia</option>
+            <option>Phillipine</option>
+            <option>Thailand</option>
+            <option>Vietnam</option>
+          </select>
+        </label>
+        <label>By partner category
+          <select id="f_partnerCat">
+            <option>All</option>
+            <option>VC Partner</option>
+            <option>Refferal Others</option>
+            <option>AM managed Partners</option>
+            <option>Alliance Partner</option>
+            <option>Referral partner</option>
+            <option>Distribution Partner</option>
+            <option>TPI Partner</option>
+            <option>Embedded partner</option>
+          </select>
+        </label>
+        <label>By agreement type
+          <select id="f_agreement">
+            <option>All</option>
+            <option>Revenue Sharing</option>
+            <option>Non Revenue Sharing</option>
+          </select>
+        </label>
+        <label>By Industry
+          <select id="f_industry">
+            <option>All</option>
+            <option>Digital Product</option>
+            <option>Entertainment</option>
+            <option>Property</option>
+            <option>Financial Service</option>
+            <option>Travel&Hospitality</option>
+            <option>Non Profit</option>
+            <option>Retail</option>
+            <option>Services</option>
+            <option>Other</option>
+          </select>
+        </label>
+        <label>By CPM
+          <select id="f_cpm">
+            <option>All</option>
+            <option>Charisse</option>
+            <option>OT</option>
+            <option>Hanna</option>
+            <option>Rizki</option>
+          </select>
+        </label>
+        <label>By product
+          <select id="f_product">
+            <option>All</option>
+            <option>VA</option>
+            <option>eWallet</option>
+            <option>Cards</option>
+            <option>Direct Debit</option>
+            <option>QR Code</option>
+          </select>
+        </label>
+        <label>By Lead Sales flow
+          <select id="f_lead">
+            <option>All</option>
+            <option>Self Serve</option>
+            <option>Sales</option>
+            <option>CPM</option>
+          </select>
+        </label>
+        <label>By Marketing activity
+          <select id="f_mkt">
+            <option>All</option>
+            <option>Event campaign</option>
+            <option>Campaign</option>
+            <option>Non Marketing</option>
+          </select>
+        </label>
+        <label>By merchant age
+          <select id="f_age">
+            <option>All</option>
+            <option>Less than 6 months transacting</option>
+            <option>More than 6 months transacting</option>
+          </select>
+        </label>
+      </div>
+    </details>
+  </header>
+
+  <main class="wrap">
+    <section class="panels">
+      <div class="panel">
+        <h3>MoM Cumu Revenue</h3>
+        <div class="sub">Cumulative Net Revenue by day of month across recent months</div>
+        <canvas id="ch_mom_cumu" class="chart"></canvas>
+      </div>
+
+      <div class="panel">
+        <h3>Net revenue vs Target (Current Month – Cumulative MTD)</h3>
+        <div class="sub">Lines: Actual, Target (cumulative), Projection (run-rate)</div>
+        <div class="kpis">
+          <div class="kpi"><h4>MTD Net Rev</h4><div class="v" id="kpi_mtd_net"></div></div>
+          <div class="kpi"><h4>Monthly Target (Net)</h4><div class="v" id="kpi_target"></div></div>
+          <div class="kpi"><h4>Run-rate Projection</h4><div class="v" id="kpi_proj"></div></div>
+          <div class="kpi"><h4>Target Attainment</h4><div class="v" id="kpi_attain"></div></div>
+        </div>
+        <canvas id="ch_net_vs_target" class="chart"></canvas>
+      </div>
+
+      <div class="panel"><h3>Gross revenue – MTD vs prior 3 months</h3><canvas id="ch_gross_trend" class="chart"></canvas></div>
+      <div class="panel"><h3>Net revenue – MTD vs prior 3 months</h3><canvas id="ch_net_trend" class="chart"></canvas></div>
+      <div class="panel"><h3>Net net revenue – MTD vs prior 3 months</h3><canvas id="ch_netnet_trend" class="chart"></canvas></div>
+      <div class="panel"><h3>TPV – MTD vs prior 3 months</h3><canvas id="ch_tpv_trend" class="chart"></canvas></div>
+
+      <div class="panel"><h3>Net Net Margin – MTD vs prior 3 months</h3><canvas id="ch_nnm_trend" class="chart"></canvas></div>
+      <div class="panel"><h3>Net Net Margin – 12 months (MoM)</h3><canvas id="ch_nnm_bar" class="bar"></canvas></div>
+
+      <div class="panel"><h3>Net Margin – MTD vs prior 3 months</h3><canvas id="ch_nm_trend" class="chart"></canvas></div>
+      <div class="panel"><h3>Net Margin – 12 months (MoM)</h3><canvas id="ch_nm_bar" class="bar"></canvas></div>
+
+      <div class="panel"><h3>Gross Margin – MTD vs prior 3 months</h3><canvas id="ch_gm_trend" class="chart"></canvas></div>
+      <div class="panel"><h3>Gross Margin – 12 months (MoM)</h3><canvas id="ch_gm_bar" class="bar"></canvas></div>
+    </section>
+    <footer>Mock data for layout only. Replace generator with your data pipeline later.</footer>
+  </main>
+
+  <script src="assets/js/financial-metrics.js"></script>
+</body>
+</html>
